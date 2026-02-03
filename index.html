@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>💘 A Very Important Question 💘</title>
+  <style>
+    :root{
+      --bg-ask:#ffe6f0;
+      --bg-yes:#ffb6c1;
+      --pink:#d63384;
+      --btn-yes:#ff69b4;
+      --btn-yes-active:#ff4fa7;
+      --btn-no:#ffc0cb;
+      --btn-no-active:#ffb3c0;
+      --w:520px;
+      --h:420px;
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background: #111;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    /* "Canvas" stage */
+    .stage{
+      width: min(var(--w), 92vw);
+      height: min(var(--h), 76vh);
+      background: var(--bg-ask);
+      border-radius: 18px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 18px 60px rgba(0,0,0,.35);
+      user-select: none;
+      touch-action: manipulation;
+    }
+
+    .question{
+      position:absolute;
+      top: 56px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align:center;
+      font-size: clamp(20px, 4.5vw, 28px);
+      font-weight: 800;
+      color: var(--pink);
+      padding: 0 16px;
+      white-space: nowrap;
+    }
+
+    .buttons{
+      position:absolute;
+      top: 190px;
+      left: 50%;
+      transform: translateX(-50%);
+      display:flex;
+      gap: 18px;
+      align-items:center;
+      justify-content:center;
+      width: 100%;
+      pointer-events: none; /* allow hearts to be purely visual; buttons re-enable */
+    }
+
+    button{
+      pointer-events: auto;
+      border: none;
+      border-radius: 14px;
+      padding: 12px 18px;
+      font-size: 18px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform .06s ease, filter .12s ease;
+      box-shadow: 0 10px 18px rgba(0,0,0,.18);
+    }
+    button:active{ transform: translateY(1px) scale(.99); }
+
+    #yesBtn{
+      background: var(--btn-yes);
+      color: #fff;
+    }
+    #yesBtn:hover{ filter: brightness(.98); }
+    #yesBtn:active{ background: var(--btn-yes-active); }
+
+    /* The "No" button is positioned absolutely so we can move it */
+    #noBtn{
+      position:absolute;
+      background: var(--btn-no);
+      color:#111;
+      left: 50%;
+      transform: translateX(110px);
+    }
+    #noBtn:active{ background: var(--btn-no-active); }
+
+    /* Heart particles */
+    .heart{
+      position:absolute;
+      bottom: -40px;
+      font-weight: 900;
+      line-height: 1;
+      will-change: transform, opacity;
+      filter: drop-shadow(0 6px 8px rgba(0,0,0,.12));
+      pointer-events:none;
+    }
+
+    /* YES screen */
+    .yesScreen{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-direction:column;
+      text-align:center;
+      padding: 18px;
+      opacity:0;
+      pointer-events:none;
+      transition: opacity .35s ease;
+    }
+    .yesScreen.show{
+      opacity:1;
+      pointer-events:auto;
+    }
+    .yay{
+      color:#fff;
+      font-size: clamp(26px, 6vw, 36px);
+      font-weight: 900;
+      margin-bottom: 14px;
+      text-shadow: 0 10px 26px rgba(0,0,0,.25);
+    }
+    .msg{
+      color:#fff;
+      font-size: clamp(16px, 4vw, 22px);
+      font-weight: 800;
+      line-height: 1.25;
+      text-shadow: 0 10px 26px rgba(0,0,0,.22);
+      white-space: pre-line;
+    }
+
+    /* Small helper text (optional) */
+    .hint{
+      position:absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 12px;
+      opacity:.55;
+      color:#000;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage" aria-label="Valentine stage">
+    <div class="question" id="question">Will you be my Valentine? 💕</div>
+
+    <div class="buttons" id="buttons">
+      <button id="yesBtn" type="button">Yes 💖</button>
+      <button id="noBtn" type="button">No 😢</button>
+    </div>
+
+    <div class="yesScreen" id="yesScreen">
+      <div class="yay">YAY, Ellie!!! 💖💐</div>
+      <div class="msg">You just made me the happiest person ever.
+Happy Valentine’s Day 😘</div>
+    </div>
+
+    <div class="hint">Tip: try to click “No” 😅</div>
+  </div>
+
+  <script>
+    // -----------------------------
+    // Config (mirrors your Python)
+    // -----------------------------
+    const HEART_COLORS = ["#ff4d6d", "#ff6fa3", "#ff2e63", "#ff85c0", "#ff5da2"];
+    const HEART_SPAWN_MS = 220;  // lower = more hearts
+    const HEART_SPEED_MIN = 1;
+    const HEART_SPEED_MAX = 4;
+
+    const stage = document.getElementById("stage");
+    const yesBtn = document.getElementById("yesBtn");
+    const noBtn  = document.getElementById("noBtn");
+    const question = document.getElementById("question");
+    const yesScreen = document.getElementById("yesScreen");
+    const buttonsWrap = document.getElementById("buttons");
+
+    let asking = true;
+
+    // -----------------------------
+    // Floating hearts
+    // -----------------------------
+    function spawnHeart(){
+      if (!stage) return;
+      const heart = document.createElement("div");
+      heart.className = "heart";
+      heart.textContent = "❤";
+
+      const rect = stage.getBoundingClientRect();
+      const x = randInt(20, rect.width - 20);
+      const size = [14,16,18,20,22,24][randInt(0,5)];
+      const color = HEART_COLORS[randInt(0, HEART_COLORS.length - 1)];
+      const speed = randInt(HEART_SPEED_MIN, HEART_SPEED_MAX);
+
+      heart.style.left = `${x}px`;
+      heart.style.fontSize = `${size}px`;
+      heart.style.color = color;
+
+      // Store per-heart animation state
+      heart.dataset.y = `${rect.height + randInt(10,60)}`;
+      heart.dataset.speed = `${speed}`;
+
+      stage.appendChild(heart);
+
+      // Auto-cleanup after ~8s just in case
+      setTimeout(() => {
+        if (heart && heart.parentNode) heart.parentNode.removeChild(heart);
+      }, 9000);
+    }
+
+    function animateHearts(){
+      const rect = stage.getBoundingClientRect();
+      const hearts = stage.querySelectorAll(".heart");
+
+      hearts.forEach(h => {
+        let y = parseFloat(h.dataset.y || (rect.height + 20));
+        const speed = parseFloat(h.dataset.speed || 2);
+        y -= speed;
+        h.dataset.y = String(y);
+        h.style.transform = `translateY(${y - rect.height}px)`;
+        // fade slightly near the top
+        const opacity = Math.max(0, Math.min(1, (y / rect.height)));
+        h.style.opacity = opacity;
+
+        if (y < -30 && h.parentNode){
+          h.parentNode.removeChild(h);
+        }
+      });
+
+      requestAnimationFrame(animateHearts);
+    }
+
+    // -----------------------------
+    // "No" button dodge behavior
+    // -----------------------------
+    function moveNoButton(){
+      if (!asking) return;
+
+      const rect = stage.getBoundingClientRect();
+      const btnRect = noBtn.getBoundingClientRect();
+
+      // Calculate a safe random position within stage
+      const paddingX = 16;
+      const paddingY = 16;
+
+      const maxX = rect.width - btnRect.width - paddingX;
+      const maxY = rect.height - btnRect.height - paddingY;
+
+      // Similar bounds to your Tk version (keep it lower-ish)
+      const minX = 16;
+      const minY = Math.max(120, rect.height * 0.42);
+
+      const x = randInt(minX, Math.max(minX, maxX));
+      const y = randInt(minY, Math.max(minY, maxY));
+
+      // Position relative to stage
+      noBtn.style.left = `${x}px`;
+      noBtn.style.top  = `${y}px`;
+      noBtn.style.transform = `translateX(0)`; // stop initial offset
+    }
+
+    // Hover (desktop)
+    noBtn.addEventListener("mouseenter", moveNoButton);
+
+    // Touch/mobile: dodge when they try to tap it
+    noBtn.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      moveNoButton();
+    }, {passive:false});
+
+    // Also dodge if finger/mouse gets close on mobile/trackpad
+    stage.addEventListener("pointermove", (e) => {
+      if (!asking) return;
+      const btnRect = noBtn.getBoundingClientRect();
+      const dx = e.clientX - (btnRect.left + btnRect.width/2);
+      const dy = e.clientY - (btnRect.top  + btnRect.height/2);
+      const dist = Math.hypot(dx, dy);
+
+      // If pointer is within 70px, dodge
+      if (dist < 70) moveNoButton();
+    });
+
+    // -----------------------------
+    // YES screen
+    // -----------------------------
+    yesBtn.addEventListener("click", () => {
+      asking = false;
+      stage.style.background = "var(--bg-yes)";
+      question.style.display = "none";
+      buttonsWrap.style.display = "none";
+
+      yesScreen.classList.add("show");
+    });
+
+    // Optional: If they click the YES screen, spawn a burst of hearts
+    yesScreen.addEventListener("click", () => {
+      for (let i=0; i<18; i++) setTimeout(spawnHeart, i*40);
+    });
+
+    // -----------------------------
+    // Utils
+    // -----------------------------
+    function randInt(min, max){
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    // Start
+    setInterval(spawnHeart, HEART_SPAWN_MS);
+    requestAnimationFrame(animateHearts);
+
+    // Place "No" initially in a nice spot (similar to Tk)
+    // We position after layout paints
+    setTimeout(() => {
+      const rect = stage.getBoundingClientRect();
+      noBtn.style.top = `${Math.round(rect.height * 0.45)}px`;
+    }, 0);
+  </script>
+</body>
+</html>
